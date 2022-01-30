@@ -12,7 +12,7 @@ namespace Mirror
     public enum NetworkManagerMode { Offline, ServerOnly, ClientOnly, Host }
 
     [DisallowMultipleComponent]
-    [AddComponentMenu("Network/NetworkManager")]
+    [AddComponentMenu("Network/Network Manager")]
     [HelpURL("https://mirror-networking.gitbook.io/docs/components/network-manager")]
     public class NetworkManager : MonoBehaviour
     {
@@ -716,8 +716,6 @@ namespace Mirror
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void ResetStatics()
         {
-            Debug.Log("Resetting Statics");
-
             // call StopHost if we have a singleton
             if (singleton)
                 singleton.StopHost();
