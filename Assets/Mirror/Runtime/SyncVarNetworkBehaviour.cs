@@ -7,6 +7,7 @@
 //
 // original Weaver code was broken because it didn't store by netId.
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Mirror
 {
@@ -28,14 +29,21 @@ namespace Mirror
             set => base.Value = NetworkBehaviourToULong(value);
         }
 
+        // OnChanged Callback is for <uint, uint>.
+        // Let's also have one for <NetworkBehaviour, NetworkBehaviour>
+        public new event Action<T, T> Callback;
+
+        // overwrite CallCallback to use the NetworkIdentity version instead
+        protected override void InvokeCallback(ulong oldValue, ulong newValue) =>
+            Callback?.Invoke(ULongToNetworkBehaviour(oldValue), ULongToNetworkBehaviour(newValue));
+
         // ctor
         // 'value = null' so we can do:
         //   SyncVarNetworkBehaviour = new SyncVarNetworkBehaviour()
         // instead of
         //   SyncVarNetworkBehaviour = new SyncVarNetworkBehaviour(null);
-        public SyncVarNetworkBehaviour(T value = null, Action<T, T> hook = null)
-            : base(NetworkBehaviourToULong(value),
-                   hook != null ? WrapHook(hook) : null) {}
+        public SyncVarNetworkBehaviour(T value = null)
+            : base(NetworkBehaviourToULong(value)) {}
 
         // implicit conversion: NetworkBehaviour value = SyncFieldNetworkBehaviour
         public static implicit operator T(SyncVarNetworkBehaviour<T> field) => field.Value;
@@ -44,9 +52,53 @@ namespace Mirror
         // even if SyncField is readonly, it's still useful: SyncFieldNetworkBehaviour = target;
         public static implicit operator SyncVarNetworkBehaviour<T>(T value) => new SyncVarNetworkBehaviour<T>(value);
 
-        // wrap <NetworkIdentity> hook within base <uint> hook
-        static Action<ulong, ulong> WrapHook(Action<T, T> hook) =>
-            (oldValue, newValue) => { hook(ULongToNetworkBehaviour(oldValue), ULongToNetworkBehaviour(newValue)); };
+        // NOTE: overloading all == operators blocks '== null' checks with an
+        // "ambiguous invocation" error. that's good. this way user code like
+        // "player.target == null" won't compile instead of silently failing!
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(SyncVarNetworkBehaviour<T> a, SyncVarNetworkBehaviour<T> b) =>
+            a.Value == b.Value;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(SyncVarNetworkBehaviour<T> a, SyncVarNetworkBehaviour<T> b) => !(a == b);
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(SyncVarNetworkBehaviour<T> a, NetworkBehaviour b) =>
+            a.Value == b;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(SyncVarNetworkBehaviour<T> a, NetworkBehaviour b) => !(a == b);
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(SyncVarNetworkBehaviour<T> a, T b) =>
+            a.Value == b;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(SyncVarNetworkBehaviour<T> a, T b) => !(a == b);
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(NetworkBehaviour a, SyncVarNetworkBehaviour<T> b) =>
+            a == b.Value;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(NetworkBehaviour a, SyncVarNetworkBehaviour<T> b) => !(a == b);
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(T a, SyncVarNetworkBehaviour<T> b) =>
+            a == b.Value;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(T a, SyncVarNetworkBehaviour<T> b) => !(a == b);
+
+        // if we overwrite == operators, we also need to overwrite .Equals.
+        public override bool Equals(object obj) => obj is SyncVarNetworkBehaviour<T> value && this == value;
+        public override int GetHashCode() => Value.GetHashCode();
 
         // helper functions to get/set netId, componentIndex from ulong
         internal static ulong Pack(uint netId, byte componentIndex)

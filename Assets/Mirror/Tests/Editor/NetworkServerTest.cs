@@ -831,12 +831,13 @@ namespace Mirror.Tests
         {
             // listen & connect
             NetworkServer.Listen(1);
-            ConnectHostClientBlockingAuthenticatedAndReady();
+            ConnectClientBlockingAuthenticatedAndReady(out _);
 
             // add an identity with two networkbehaviour components
             // spawned, otherwise command handler won't find it in .spawned.
             // WITHOUT OWNER = WITHOUT AUTHORITY for this test
-            CreateNetworkedAndSpawn(out GameObject _, out NetworkIdentity _, out CommandTestNetworkBehaviour comp);
+            CreateNetworkedAndSpawn(out _, out _, out CommandTestNetworkBehaviour comp,
+                                    out _, out _, out _);
 
             // call the command
             comp.TestCommand();
@@ -1301,10 +1302,11 @@ namespace Mirror.Tests
         public void SyncObjectChanges_DontGrowWithoutObservers()
         {
             NetworkServer.Listen(1);
-            ConnectHostClientBlockingAuthenticatedAndReady();
+            ConnectClientBlockingAuthenticatedAndReady(out _);
 
             // one monster
-            CreateNetworkedAndSpawn(out _, out NetworkIdentity identity, out NetworkBehaviourWithSyncVarsAndCollections comp);
+            CreateNetworkedAndSpawn(out _, out NetworkIdentity identity, out NetworkBehaviourWithSyncVarsAndCollections comp,
+                                    out _, out _, out _);
 
             // without AOI, connections observer everything.
             // clear the observers first.

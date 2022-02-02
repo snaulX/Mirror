@@ -42,6 +42,7 @@
     }
 */
 using System;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 
 namespace Mirror
@@ -58,14 +59,21 @@ namespace Mirror
             set => base.Value = GetNetId(value);
         }
 
+        // OnChanged Callback is for <uint, uint>.
+        // Let's also have one for <GameObject, GameObject>
+        public new event Action<GameObject, GameObject> Callback;
+
+        // overwrite CallCallback to use the GameObject version instead
+        protected override void InvokeCallback(uint oldValue, uint newValue) =>
+            Callback?.Invoke(GetGameObject(oldValue), GetGameObject(newValue));
+
         // ctor
         // 'value = null' so we can do:
         //   SyncVarGameObject = new SyncVarGameObject()
         // instead of
         //   SyncVarGameObject = new SyncVarGameObject(null);
-        public SyncVarGameObject(GameObject value = null, Action<GameObject, GameObject> hook = null)
-            : base(GetNetId(value),
-                   hook != null ? WrapHook(hook) : null) {}
+        public SyncVarGameObject(GameObject value = null)
+            : base(GetNetId(value)) {}
 
         // helper function to get netId from GameObject (if any)
         static uint GetNetId(GameObject go)
@@ -92,10 +100,36 @@ namespace Mirror
         // even if SyncField is readonly, it's still useful: SyncFieldGameObject = target;
         public static implicit operator SyncVarGameObject(GameObject value) => new SyncVarGameObject(value);
 
-        // wrap <GameObject> hook within base <uint> hook
-        static Action<uint, uint> WrapHook(Action<GameObject, GameObject> hook) =>
-            (oldValue, newValue) => {
-                hook(GetGameObject(oldValue), GetGameObject(newValue));
-            };
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(SyncVarGameObject a, SyncVarGameObject b) =>
+            a.Value == b.Value;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(SyncVarGameObject a, SyncVarGameObject b) => !(a == b);
+
+        // NOTE: overloading all == operators blocks '== null' checks with an
+        // "ambiguous invocation" error. that's good. this way user code like
+        // "player.target == null" won't compile instead of silently failing!
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(SyncVarGameObject a, GameObject b) =>
+            a.Value == b;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(SyncVarGameObject a, GameObject b) => !(a == b);
+
+        // == operator for comparisons like Player.target==monster
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator ==(GameObject a, SyncVarGameObject b) =>
+            a == b.Value;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool operator !=(GameObject a, SyncVarGameObject b) => !(a == b);
+
+        // if we overwrite == operators, we also need to overwrite .Equals.
+        public override bool Equals(object obj) => obj is SyncVarGameObject value && this == value;
+        public override int GetHashCode() => Value.GetHashCode();
     }
 }
