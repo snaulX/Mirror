@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 
 namespace Mirror.Authenticators
@@ -50,12 +50,12 @@ namespace Mirror.Authenticators
         /// Called on server from OnServerAuthenticateInternal when a client needs to authenticate
         /// </summary>
         /// <param name="conn">Connection to client.</param>
-        public override void OnServerAuthenticate(NetworkConnection conn)
+        public override void OnServerAuthenticate(NetworkConnectionToClient conn)
         {
             // do nothing, wait for client to send his id
         }
 
-        void OnAuthRequestMessage(NetworkConnection conn, AuthRequestMessage msg)
+        void OnAuthRequestMessage(NetworkConnectionToClient conn, AuthRequestMessage msg)
         {
             Debug.Log($"connection {conn.connectionId} authenticated with id {msg.clientDeviceID}");
 
@@ -80,7 +80,7 @@ namespace Mirror.Authenticators
         public override void OnStartClient()
         {
             // register a handler for the authentication response we expect from server
-            NetworkClient.RegisterHandler<AuthResponseMessage>((Action<AuthResponseMessage>)OnAuthResponseMessage, false);
+            NetworkClient.RegisterHandler<AuthResponseMessage>(OnAuthResponseMessage, false);
         }
 
         /// <summary>
