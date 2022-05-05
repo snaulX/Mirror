@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Mirror.Tests.RemoteAttrributeTest;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Mirror.Tests
 {
@@ -1368,6 +1371,36 @@ namespace Mirror.Tests
             Assert.That(reader.Position, Is.EqualTo(4), "should read 4 bytes when netid is 0");
         }
 
+        // test to prevent https://github.com/vis2k/Mirror/issues/2972
+        [Test]
+        public void TestNetworkBehaviourDoesntExistOnClient()
+        {
+            // create spawned because we will look up netId in .spawned
+            CreateNetworkedAndSpawn(out _, out _, out RpcNetworkIdentityBehaviour serverComponent,
+                                    out _, out _, out RpcNetworkIdentityBehaviour clientComponent);
+
+            // write on server where it's != null and exists
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteNetworkBehaviour(serverComponent);
+
+            byte[] bytes = writer.ToArray();
+            Assert.That(bytes.Length, Is.EqualTo(5), "Networkbehaviour should be 5 bytes long.");
+
+            // make it disappear / despawn on client
+            NetworkServer.spawned.Remove(serverComponent.netId);
+            NetworkClient.spawned.Remove(clientComponent.netId);
+
+            // reading should return null component
+            NetworkReader reader = new NetworkReader(bytes);
+            RpcNetworkIdentityBehaviour actual = reader.ReadNetworkBehaviour<RpcNetworkIdentityBehaviour>();
+            Assert.That(actual, Is.Null);
+
+            // IMPORTANT: should have read EXACTLY as much as was written.
+            // even if NetworkBehaviour wasn't found on client.
+            // otherwise data gets corrupted.
+            Assert.That(reader.Position, Is.EqualTo(writer.Position));
+        }
+
         [Test]
         [Description("Uses Generic read function to check weaver correctly creates it")]
         public void TestNetworkBehaviourWeaverGenerated()
@@ -1386,6 +1419,120 @@ namespace Mirror.Tests
             NetworkReader reader = new NetworkReader(bytes);
             RpcNetworkIdentityBehaviour actual = reader.Read<RpcNetworkIdentityBehaviour>();
             Assert.That(actual, Is.EqualTo(behaviour), "Read should find the same behaviour as written");
+        }
+
+        // test to make sure unspawned / prefab GameObjects can't be synced.
+        // they would be null on the other end, and it might not be obvious why.
+        // https://github.com/vis2k/Mirror/issues/2060
+        [Test]
+        public void TestWritingUnspawnedGameObject()
+        {
+            // create GO + NI, but unspawned
+            CreateNetworked(out GameObject go, out _);
+
+            // serializing in rpc/cmd/message should warn if unspawned.
+            LogAssert.Expect(LogType.Warning, new Regex("Attempted to serialize unspawned.*"));
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteGameObject(go);
+        }
+
+        // test to make sure unspawned / prefab GameObjects can't be synced.
+        // they would be null on the other end, and it might not be obvious why.
+        // https://github.com/vis2k/Mirror/issues/2060
+        [Test]
+        public void TestWritingUnspawnedNetworkIdentity()
+        {
+            // create GO + NI, but unspawned
+            CreateNetworked(out _, out NetworkIdentity identity);
+
+            // serializing in rpc/cmd/message should warn if unspawned.
+            LogAssert.Expect(LogType.Warning, new Regex("Attempted to serialize unspawned.*"));
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteNetworkIdentity(identity);
+        }
+
+        [Test]
+        public void WriteTexture2D_black()
+        {
+            // write
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteTexture2D(Texture2D.blackTexture);
+
+            // read
+            NetworkReader reader = new NetworkReader(writer.ToArray());
+            Texture2D texture = reader.ReadTexture2D();
+
+            // compare
+            Assert.That(texture.width, Is.EqualTo(Texture2D.blackTexture.width));
+            Assert.That(texture.height, Is.EqualTo(Texture2D.blackTexture.height));
+            Assert.That(texture.GetPixels32().SequenceEqual(Texture2D.blackTexture.GetPixels32()));
+        }
+
+        [Test]
+        public void WriteTexture2D_normal()
+        {
+            // write
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteTexture2D(Texture2D.normalTexture);
+
+            // read
+            NetworkReader reader = new NetworkReader(writer.ToArray());
+            Texture2D texture = reader.ReadTexture2D();
+
+            // compare
+            Assert.That(texture.width, Is.EqualTo(Texture2D.normalTexture.width));
+            Assert.That(texture.height, Is.EqualTo(Texture2D.normalTexture.height));
+            Assert.That(texture.GetPixels32().SequenceEqual(Texture2D.normalTexture.GetPixels32()));
+        }
+
+        // test to prevent https://github.com/vis2k/Mirror/issues/3144
+        [Test]
+        public void WriteTexture2D_Null()
+        {
+            // write
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteTexture2D(null);
+
+            // read
+            NetworkReader reader = new NetworkReader(writer.ToArray());
+            Texture2D texture = reader.ReadTexture2D();
+            Assert.That(texture, Is.Null);
+        }
+
+        [Test]
+        public void WriteSprite_normal()
+        {
+            // create a test sprite
+            Sprite example = Sprite.Create(Texture2D.normalTexture, new Rect(1, 1, 2, 2), Vector2.zero);
+
+            // write
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteSprite(example);
+
+            // read
+            NetworkReader reader = new NetworkReader(writer.ToArray());
+            Sprite sprite = reader.ReadSprite();
+
+            // compare
+            Assert.That(sprite.rect, Is.EqualTo(example.rect));
+            Assert.That(sprite.pivot, Is.EqualTo(example.pivot));
+            Assert.That(sprite.texture.width, Is.EqualTo(example.texture.width));
+            Assert.That(sprite.texture.height, Is.EqualTo(example.texture.height));
+            Assert.That(sprite.texture.GetPixels32().SequenceEqual(example.texture.GetPixels32()));
+        }
+
+        // test to prevent https://github.com/vis2k/Mirror/issues/3144
+        [Test]
+        public void WriteSprite_Null()
+        {
+            // write
+            NetworkWriter writer = new NetworkWriter();
+            writer.WriteSprite(null);
+
+            // read
+            NetworkReader reader = new NetworkReader(writer.ToArray());
+            Sprite sprite = reader.ReadSprite();
+            Assert.That(sprite, Is.Null);
         }
     }
 }
